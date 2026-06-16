@@ -1,0 +1,19 @@
+# /etc/systemd/system/lovetype.service
+[Unit]
+Description=LoveType (Next.js production server)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/var/www/lovetype
+EnvironmentFile=/var/www/lovetype/.env.production
+Environment=NODE_ENV=production
+Environment=PORT=3000
+ExecStart=/bin/bash -lc 'npm run start'
+Restart=always
+RestartSec=5
+# basic hardening
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
