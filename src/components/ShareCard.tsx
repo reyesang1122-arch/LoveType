@@ -157,20 +157,37 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
         </div>
       </div>
 
-      {/* footer */}
+      {/* footer — invitation / link channel so viewers come take the test */}
       <div
         style={{
           position: "relative",
           zIndex: 2,
           display: "flex",
-          justifyContent: "space-between",
+          flexDirection: "column",
           alignItems: "center",
-          fontSize: 30,
-          opacity: 0.9,
+          gap: 16,
         }}
       >
-        <span style={{ fontWeight: 700 }}>💞 {SITE.nameZh}</span>
-        <span>{SITE.url.replace(/^https?:\/\//, "")}</span>
+        <div style={{ fontSize: 34, fontWeight: 600, opacity: 0.95 }}>
+          👉 测出你的爱情守护灵
+        </div>
+        <div
+          style={{
+            background: "rgba(255,255,255,0.92)",
+            color: "#1b1633",
+            fontSize: 36,
+            fontWeight: 800,
+            letterSpacing: 1,
+            padding: "20px 44px",
+            borderRadius: 999,
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+          }}
+        >
+          <span>💞</span>
+          <span>{SITE.url.replace(/^https?:\/\//, "")}</span>
+        </div>
       </div>
     </div>
   );

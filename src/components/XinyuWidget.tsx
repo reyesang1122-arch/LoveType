@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { track } from "@/lib/analytics";
 import { SITE } from "@/lib/site";
 
@@ -34,6 +34,11 @@ export default function XinyuWidget() {
   const [expanded, setExpanded] = useState(false);
   const [slogan, setSlogan] = useState(0);
   const drag = useRef({ active: false, moved: false, sx: 0, sy: 0, ox: 0, oy: 0 });
+  // keep latest position available inside window listeners (avoid stale closures)
+  const posRef = useRef<Pos>(pos);
+  useEffect(() => {
+    posRef.current = pos;
+  }, [pos]);
 
   // initial position (restore from localStorage or bottom-right default)
   useEffect(() => {
@@ -67,33 +72,24 @@ export default function XinyuWidget() {
     return () => window.removeEventListener("resize", onResize);
   }, [mounted]);
 
-  function onPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
-    const d = drag.current;
-    d.active = true;
-    d.moved = false;
-    d.sx = e.clientX;
-    d.sy = e.clientY;
-    d.ox = pos.x;
-    d.oy = pos.y;
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-  }
-
-  function onPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+  const onMove = useCallback((e: PointerEvent) => {
     const d = drag.current;
     if (!d.active) return;
     const dx = e.clientX - d.sx;
     const dy = e.clientY - d.sy;
-    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
       d.moved = true;
       setExpanded(false);
     }
     setPos(clamp({ x: d.ox + dx, y: d.oy + dy }, window.innerWidth, window.innerHeight));
-  }
+  }, []);
 
-  function onPointerUp() {
+  const onUp = useCallback(() => {
     const d = drag.current;
     if (!d.active) return;
     d.active = false;
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
     if (!d.moved) {
       setExpanded((v) => !v);
       return;
@@ -112,7 +108,31 @@ export default function XinyuWidget() {
       }
       return snapped;
     });
-  }
+  }, [onMove]);
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      const d = drag.current;
+      d.active = true;
+      d.moved = false;
+      d.sx = e.clientX;
+      d.sy = e.clientY;
+      d.ox = posRef.current.x;
+      d.oy = posRef.current.y;
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    },
+    [onMove, onUp]
+  );
+
+  // clean up listeners if unmounted mid-drag
+  useEffect(() => {
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [onMove, onUp]);
 
   function go() {
     void track("xinyu_clicked", { metadata: { source: "widget" } });
@@ -194,9 +214,6 @@ export default function XinyuWidget() {
         {/* floating bubble */}
         <button
           onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
           aria-label="心语 AI 情侣辅导师"
           className="relative flex h-12 w-12 cursor-grab touch-none items-center justify-center rounded-full bg-white shadow-[0_4px_22px_rgba(20,16,50,0.22)] ring-1 ring-black/5 transition active:scale-95 active:cursor-grabbing"
           style={{ opacity: expanded ? 1 : 0.94 }}

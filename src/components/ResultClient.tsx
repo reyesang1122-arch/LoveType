@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ARCHETYPES, getArchetype } from "@/data/archetypes";
@@ -24,9 +24,15 @@ function preloadImage(src: string): Promise<void> {
 export default function ResultClient() {
   const params = useSearchParams();
   const cardRef = useRef<HTMLDivElement>(null);
+  const shareFileRef = useRef<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [canShare, setCanShare] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+  }, []);
 
   const scores = decodeScores(params.get("s"));
 
@@ -58,21 +64,40 @@ export default function ResultClient() {
   }
 
   async function handleGenerate() {
-    if (!cardRef.current || busy) return;
+    if (busy) return;
     setBusy(true);
     try {
-      // make sure the avatar is decoded before we snapshot the card
+      const node = cardRef.current;
+      if (!node) {
+        flash("正在准备，请再点一次");
+        return;
+      }
+      // make sure fonts + the avatar are ready before snapshotting
+      try {
+        await (document as Document & { fonts?: { ready: Promise<unknown> } }).fonts?.ready;
+      } catch {
+        /* ignore */
+      }
       await preloadImage(top.avatar);
+
       const { toPng } = await import("html-to-image");
-      // first pass primes fonts/images; second pass is reliably complete
-      await toPng(cardRef.current, { width: 1080, height: 1920, pixelRatio: 1, cacheBust: true });
-      const dataUrl = await toPng(cardRef.current, {
-        width: 1080,
-        height: 1920,
-        pixelRatio: 1,
-        cacheBust: true,
-      });
+      const opts = { width: 1080, height: 1920, pixelRatio: 1, cacheBust: true };
+      // first pass primes images; second pass is reliably complete
+      let dataUrl = await toPng(node, opts);
+      dataUrl = await toPng(node, opts);
+
+      if (!dataUrl || dataUrl.length < 5000) throw new Error("empty render");
       setPreviewUrl(dataUrl);
+      // pre-build the shareable File now (NOT inside the share tap) so that
+      // navigator.share() fires synchronously within the gesture on iOS.
+      try {
+        const blob = await (await fetch(dataUrl)).blob();
+        shareFileRef.current = new File([blob], `love-spirit-${top.id}.png`, {
+          type: "image/png",
+        });
+      } catch {
+        shareFileRef.current = null;
+      }
       void track("share_card_generated", { archetype: top.id });
     } catch {
       flash("生成失败，请重试");
@@ -81,34 +106,38 @@ export default function ResultClient() {
     }
   }
 
-  async function handleSaveShare() {
+  function downloadImage() {
     if (!previewUrl) return;
+    const a = document.createElement("a");
+    a.href = previewUrl;
+    a.download = `love-spirit-${top.id}.png`;
+    a.click();
+    flash("已保存图片，打开 IG 发限时动态吧 ✨");
+  }
+
+  async function handleSaveShare() {
     void track("share_clicked", { archetype: top.id });
-    try {
-      const blob = await (await fetch(previewUrl)).blob();
-      const file = new File([blob], `love-spirit-${top.id}.png`, { type: "image/png" });
+    const file = shareFileRef.current;
+    const shareable =
+      !!file &&
+      typeof navigator !== "undefined" &&
+      typeof navigator.canShare === "function" &&
+      navigator.canShare({ files: [file] });
 
-      const canShareFiles =
-        typeof navigator !== "undefined" &&
-        navigator.canShare &&
-        navigator.canShare({ files: [file] });
-
-      if (canShareFiles) {
+    if (shareable && file) {
+      try {
         await navigator.share({
           files: [file],
           title: `我的爱情守护灵是${top.spiritName}`,
-          text: `我在 ${SITE.nameZh} 的爱情守护灵是「${top.spiritName}」${top.animalEmoji}，快来测测你的！`,
+          text: `我的爱情守护灵是「${top.spiritName}」${top.animalEmoji}，快来测测你的 👉`,
+          url: SITE.url,
         });
-      } else {
-        const a = document.createElement("a");
-        a.href = previewUrl;
-        a.download = file.name;
-        a.click();
-        flash("已保存图片，去 IG 发限时动态吧 ✨");
+      } catch (err) {
+        const name = (err as { name?: string })?.name;
+        if (name !== "AbortError") downloadImage();
       }
-    } catch (err) {
-      const name = (err as { name?: string })?.name;
-      if (name !== "AbortError") flash("保存失败，可长按图片保存");
+    } else {
+      downloadImage();
     }
   }
 
@@ -135,7 +164,7 @@ export default function ResultClient() {
           pointerEvents: "none",
         }}
       >
-        <ShareCard archetype={top} secondary={secondary} score={result.score} />
+        <ShareCard ref={cardRef} archetype={top} secondary={secondary} score={result.score} />
       </div>
 
       {/* Hero with archetype gradient */}
@@ -281,10 +310,10 @@ export default function ResultClient() {
             {busy ? (
               <>
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                生成分享卡片…
+                正在生成卡片…
               </>
             ) : (
-              <>📸 生成分享卡片</>
+              <>📲 一键生成 IG 分享卡</>
             )}
           </button>
           <button
@@ -316,22 +345,27 @@ export default function ResultClient() {
           onClick={() => setPreviewUrl(null)}
         >
           <p className="mb-3 text-center text-sm text-white/80">
-            长按图片即可保存，或点下方按钮分享 👇
+            {canShare
+              ? "点下方按钮 → 选 Instagram → 限时动态 📲"
+              : "长按图片保存，再去 IG 发限时动态 👇"}
           </p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={previewUrl}
             alt={`${top.spiritName} 分享卡`}
             onClick={(e) => e.stopPropagation()}
-            className="max-h-[68vh] w-auto rounded-2xl shadow-2xl ring-1 ring-white/20"
+            className="max-h-[64vh] w-auto rounded-2xl shadow-2xl ring-1 ring-white/20"
           />
           <div className="mt-5 flex w-full max-w-xs flex-col gap-3" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={handleSaveShare}
               className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-6 py-3.5 text-base font-bold text-ink shadow-lg transition active:scale-[0.98]"
             >
-              📲 保存 / 分享到 IG Story
+              {canShare ? "📲 分享到 IG Story / 其他 App" : "💾 保存图片"}
             </button>
+            <p className="text-center text-[11px] leading-relaxed text-white/60">
+              卡片上有网址，朋友看到就能来测自己的守护灵 💞
+            </p>
             <button
               onClick={() => setPreviewUrl(null)}
               className="text-sm font-medium text-white/70"
