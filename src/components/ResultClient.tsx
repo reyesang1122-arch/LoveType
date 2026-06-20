@@ -8,6 +8,7 @@ import { decodeScores, resultFromScores } from "@/lib/scoring";
 import ShareCard from "@/components/ShareCard";
 import ConversionCTA from "@/components/ConversionCTA";
 import { track } from "@/lib/analytics";
+import { makeQrDataUrl } from "@/lib/qr";
 import { SITE } from "@/lib/site";
 
 /** Warm the browser cache so html-to-image can inline the avatar instantly. */
@@ -29,9 +30,19 @@ export default function ResultClient() {
   const [canShare, setCanShare] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [qr, setQr] = useState<string>("");
 
   useEffect(() => {
     setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+  }, []);
+
+  // Pre-render the QR once so it's already inside the off-screen card at capture time.
+  useEffect(() => {
+    let alive = true;
+    makeQrDataUrl(SITE.url).then((d) => alive && setQr(d));
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const scores = decodeScores(params.get("s"));
@@ -117,6 +128,13 @@ export default function ResultClient() {
 
   async function handleSaveShare() {
     void track("share_clicked", { archetype: top.id });
+    // Copy the link so users can paste it as a tappable IG "link sticker".
+    try {
+      await navigator.clipboard?.writeText(SITE.url);
+      flash("🔗 链接已复制！在 IG 限动里加「链接贴纸」粘贴，朋友就能一点跳过来（图里也有二维码可扫）");
+    } catch {
+      /* clipboard may be blocked; QR on the card still works */
+    }
     const file = shareFileRef.current;
     const shareable =
       !!file &&
@@ -164,7 +182,7 @@ export default function ResultClient() {
           pointerEvents: "none",
         }}
       >
-        <ShareCard ref={cardRef} archetype={top} secondary={secondary} score={result.score} />
+        <ShareCard ref={cardRef} archetype={top} secondary={secondary} score={result.score} qrDataUrl={qr} />
       </div>
 
       {/* Hero with archetype gradient */}

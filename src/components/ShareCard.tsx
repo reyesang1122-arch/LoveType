@@ -6,6 +6,8 @@ interface ShareCardProps {
   archetype: Archetype;
   secondary: Archetype;
   score: number;
+  /** Inline QR (data URL) that viewers can scan to open the site. */
+  qrDataUrl?: string;
 }
 
 /**
@@ -14,7 +16,7 @@ interface ShareCardProps {
  * Uses inline styles + absolute px so the export is pixel-accurate.
  */
 const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
-  { archetype, secondary, score },
+  { archetype, secondary, score, qrDataUrl },
   ref
 ) {
   const t = archetype.theme;
@@ -157,36 +159,61 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
         </div>
       </div>
 
-      {/* footer — invitation / link channel so viewers come take the test */}
+      {/* footer — scannable QR + link so viewers can actually come take the test */}
       <div
         style={{
           position: "relative",
           zIndex: 2,
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
-          gap: 16,
+          justifyContent: "center",
+          gap: 28,
         }}
       >
-        <div style={{ fontSize: 34, fontWeight: 600, opacity: 0.95 }}>
-          👉 测出你的爱情守护灵
-        </div>
-        <div
-          style={{
-            background: "rgba(255,255,255,0.92)",
-            color: "#1b1633",
-            fontSize: 36,
-            fontWeight: 800,
-            letterSpacing: 1,
-            padding: "20px 44px",
-            borderRadius: 999,
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-          }}
-        >
-          <span>💞</span>
-          <span>{SITE.url.replace(/^https?:\/\//, "")}</span>
+        {qrDataUrl && (
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: 28,
+              padding: 18,
+              boxShadow: "0 16px 50px rgba(0,0,0,0.28)",
+              flexShrink: 0,
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={qrDataUrl}
+              alt="QR"
+              width={180}
+              height={180}
+              style={{ width: 180, height: 180, display: "block" }}
+            />
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, alignItems: "flex-start" }}>
+          <div style={{ fontSize: 36, fontWeight: 700, opacity: 0.95, lineHeight: 1.3 }}>
+            {qrDataUrl ? "📷 扫码 / 点链接" : "👉 测出你的爱情守护灵"}
+          </div>
+          <div style={{ fontSize: 30, fontWeight: 600, opacity: 0.95 }}>
+            👉 测出你的爱情守护灵
+          </div>
+          <div
+            style={{
+              background: "rgba(255,255,255,0.92)",
+              color: "#1b1633",
+              fontSize: 32,
+              fontWeight: 800,
+              letterSpacing: 1,
+              padding: "16px 34px",
+              borderRadius: 999,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <span>💞</span>
+            <span>{SITE.url.replace(/^https?:\/\//, "")}</span>
+          </div>
         </div>
       </div>
     </div>
